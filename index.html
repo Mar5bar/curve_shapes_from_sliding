@@ -17,6 +17,8 @@
       }
       canvas {
         border: 1px solid #000;
+        height: 40vh;
+        width: 70vw;
       }
       #drawingCanvas {
         cursor: crosshair;
@@ -48,13 +50,13 @@
       <div style="writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 10px;">
       Sliding displacement
       </div>
-      <canvas id="drawingCanvas" width="800px" height="500px"></canvas>
+      <canvas id="drawingCanvas"></canvas>
     </div>
     <div class="container">
       <div style="writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 10px;">
       Flagellum shape
       </div>
-      <canvas id="flagCanvas" width="800px" height="500px"></canvas>
+      <canvas id="flagCanvas"></canvas>
     </div>
     <button id="clearButton">Clear</button>
 
@@ -64,6 +66,8 @@
       const flagCanvas = document.getElementById("flagCanvas");
       const flagCtx = flagCanvas.getContext("2d");
       const clearButton = document.getElementById("clearButton");
+
+      resizeCanvases();
 
       let drawing = false;
       let points = [];
@@ -142,6 +146,11 @@
         clearCanvases();
       });
 
+      window.addEventListener("resize", () => {
+        resizeCanvases();
+        handlePoints();
+      });
+
       function getMousePos(canvas, event) {
         const rect = canvas.getBoundingClientRect();
         return {
@@ -154,6 +163,13 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         flagCtx.clearRect(0, 0, canvas.width, canvas.height);
         drawAxes();
+      }
+
+      function resizeCanvases(){
+        ctx.canvas.width = document.getElementById("drawingCanvas").clientWidth;
+        ctx.canvas.height = document.getElementById("drawingCanvas").clientHeight;
+        flagCtx.canvas.width = document.getElementById("flagCanvas").clientWidth;
+        flagCtx.canvas.height = document.getElementById("flagCanvas").clientHeight;
       }
 
       function handlePoints() {
@@ -266,11 +282,11 @@
         let xScale = (0.8 * canvas.width) / xRange;
         let yScale = (0.8 * canvas.height) / yRange;
         let scale = Math.min(xScale, yScale);
-        cumulativeX = cumulativeX.map((x) => (x - xMin) * scale);
+        cumulativeX = cumulativeX.map((x) => (x - (xMin + xMax)/2) * scale);
         cumulativeY = cumulativeY.map((y) => (y - (yMin + yMax) / 2) * scale);
         for (let i = 0; i < cumulativeX.length; i++) {
           flagCtx.lineTo(
-            cumulativeX[i] + 0.1 * canvas.width,
+            canvas.width / 2 + cumulativeX[i],
             canvas.height / 2 + cumulativeY[i],
           );
         }
