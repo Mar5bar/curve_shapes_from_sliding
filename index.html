@@ -80,6 +80,7 @@
       params.basal_angle = 0;
       params.sliding_scale = 1;
       params.numPoints = 100;
+      params.baseScale = 3;
 
       // Add a GUI.
       GUI = new dat.GUI({ closeOnTop: true, autoPlace: true });
@@ -88,6 +89,7 @@
       GUI.add(params, "basal_sliding", -1, 1).name("Basal sliding (*radius)").onChange(handlePoints);
       GUI.add(params, "basal_angle", -Math.PI, Math.PI).name("Basal angle").onChange(handlePoints);
       GUI.add(params, "numPoints", 20, 200).name("Number of points").onChange(handlePoints);
+      GUI.add(params, "baseScale", 0, 5).name("Base marker size").onChange(handlePoints);
 
       // Draw axes
       function drawAxes() {
@@ -293,6 +295,17 @@
         flagCtx.strokeStyle = "black";
         flagCtx.lineWidth = 6;
         flagCtx.stroke();
+        // Draw a point at the first point.
+        flagCtx.beginPath();
+        flagCtx.arc(
+          canvas.width / 2 + cumulativeX[0],
+          canvas.height / 2 + cumulativeY[0],
+          params.baseScale*0.01*Math.min(canvas.width, canvas.height),
+          0,
+          2 * Math.PI,
+        );
+        flagCtx.fillStyle = "black";
+        flagCtx.fill();
       }
 
       function fitCurve(points, samples) {
