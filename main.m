@@ -9,6 +9,8 @@ sliding_distance = @(s,t) sin(2*pi*s/flag_length-t)*flag_radius;
 % A static plot
 figure
 plot_shape(flag_length,flag_radius,basal_sliding,basal_angle,sliding_distance);
+% Save the figure as a png.
+exportgraphics(gcf,'flagellum.png','Resolution',300)
 
 % An animated plot
 figure
