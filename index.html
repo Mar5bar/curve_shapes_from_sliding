@@ -17,7 +17,15 @@
       }
       canvas {
         border: 1px solid #000;
+      }
+      #drawingCanvas {
         cursor: crosshair;
+      }
+      div.container {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        justify-content: center;
       }
       button {
         margin-top: 20px;
@@ -36,8 +44,18 @@
   </head>
   <script type="text/javascript" src="dat.gui.min.js"></script>
   <body>
-    <canvas id="drawingCanvas" width="800px" height="500px"></canvas>
-    <canvas id="flagCanvas" width="800px" height="500px"></canvas>
+    <div class="container">
+      <div style="writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 10px;">
+      Sliding displacement
+      </div>
+      <canvas id="drawingCanvas" width="800px" height="500px"></canvas>
+    </div>
+    <div class="container">
+      <div style="writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 10px;">
+      Flagellum shape
+      </div>
+      <canvas id="flagCanvas" width="800px" height="500px"></canvas>
+    </div>
     <button id="clearButton">Clear</button>
 
     <script>
@@ -164,7 +182,8 @@
             // BUG: Won't find the LAST point that is maximal.
             let endIndex = points.findIndex((point) => point.x === maxX);
             let startIndex = points.findIndex((point) => point.x === minX);
-            points = points.slice(startIndex, endIndex + 1);
+            points = points.slice(endIndex, startIndex + 1);
+            points = points.reverse();
           }
 
           // If the points are increasing overall, remove all points before the minimum x value.
