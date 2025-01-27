@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Draw Curve and Get Points</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        background-color: #f9f9f9;
+      }
+      canvas {
+        border: 1px solid #000;
+        cursor: crosshair;
+      }
+      button {
+        margin-top: 20px;
+        padding: 10px 15px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+        background-color: #007bff;
+        color: white;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <script type="text/javascript" src="dat.gui.min.js"></script>
+  <body>
+    <canvas id="drawingCanvas" width="800px" height="500px"></canvas>
+    <canvas id="flagCanvas" width="800px" height="500px"></canvas>
+    <button id="clearButton">Clear</button>
+
+    <script>
+      const canvas = document.getElementById("drawingCanvas");
+      const ctx = canvas.getContext("2d");
+      const flagCanvas = document.getElementById("flagCanvas");
+      const flagCtx = flagCanvas.getContext("2d");
+      const clearButton = document.getElementById("clearButton");
+
+      let drawing = false;
+      let points = [];
+      let drawnPoints = [];
+      let flagPoints = [];
+      let axisLeft = 50;
+      let params = {};
+      params.radius = 0.01;
+      params.basal_sliding = 0;
+      params.basal_angle = 0;
+      params.sliding_scale = 1;
+      params.numPoints = 100;
+
+      // Add a GUI.
+      GUI = new dat.GUI({ closeOnTop: true, autoPlace: true });
+      GUI.domElement.id = "GUI";
+      GUI.add(params, "sliding_scale", 0.1, 10).name("Scale (*radius)").onChange(handlePoints);
+      GUI.add(params, "basal_sliding", -1, 1).name("Basal sliding (*radius)").onChange(handlePoints);
+      GUI.add(params, "basal_angle", -Math.PI, Math.PI).name("Basal angle").onChange(handlePoints);
+      GUI.add(params, "numPoints", 20, 200).name("Number of points").onChange(handlePoints);
+
+      // Draw axes
+      function drawAxes() {
+        // Vertical axis
+        ctx.beginPath();
+        ctx.moveTo(axisLeft, 0);
+        ctx.lineTo(axisLeft, canvas.height);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Horizontal axis
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height / 2);
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      drawAxes();
+
+      canvas.addEventListener("mousedown", (e) => {
+        drawing = true;
+        points = []; // Reset points when a new drawing starts
+        clearCanvases();
+        ctx.beginPath();
+        ctx.moveTo(getMousePos(canvas, e).x, getMousePos(canvas, e).y);
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
+        if (drawing) {
+          const pos = getMousePos(canvas, e);
+          points.push(pos);
+          ctx.lineWidth = 2;
+          ctx.lineTo(pos.x, pos.y);
+          ctx.stroke();
+        }
+      });
+
+      canvas.addEventListener("mouseup", () => {
+        drawing = false;
+        drawnPoints = points;
+        handlePoints();
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        if (drawing) {
+          drawing = false;
+          drawnPoints = points;
+          handlePoints();
+        }
+      });
+
+      clearButton.addEventListener("click", () => {
+        clearCanvases();
+      });
+
+      function getMousePos(canvas, event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        };
+      }
+
+      function clearCanvases() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        flagCtx.clearRect(0, 0, canvas.width, canvas.height);
+        drawAxes();
+      }
+
+      function handlePoints() {
+        points = drawnPoints;
+        // Discard any points with x less than the axis.
+        points = points.filter((point) => point.x >= axisLeft);
+        // If there are any points with duplicate x values, remove all but the first one.
+        points = points.filter(
+          (point, index) => points.findIndex((p) => p.x === point.x) === index,
+        );
+        // The x coordinates should either be monotonic increasing or decreasing.
+        if (points.length > 1) {
+          let isIncreasing = points[0].x < points.at(-1).x;
+          // Find the minimum and maximum x values.
+          const minX = Math.min(...points.map((point) => point.x));
+          const maxX = Math.max(...points.map((point) => point.x));
+          // If the points are increasing, remove all points that occured before the minimum x value was reached.
+          if (isIncreasing) {
+            let startIndex = points.findIndex((point) => point.x === minX);
+            // Find the index of the point with maximal x value.
+            // BUG: Won't find the LAST point that is maximal.
+            let endIndex = points.findIndex((point) => point.x === maxX);
+            points = points.slice(startIndex, endIndex + 1);
+          } else {
+            // If the points are decreasing, remove all points that occured before the maximum x value was reached.
+            // BUG: Won't find the LAST point that is maximal.
+            let endIndex = points.findIndex((point) => point.x === maxX);
+            let startIndex = points.findIndex((point) => point.x === minX);
+            points = points.slice(startIndex, endIndex + 1);
+          }
+
+          // If the points are increasing overall, remove all points before the minimum x value.
+          // If the points are decreasing overall, remove all points after the maximum x value.
+          points = points.filter((point) =>
+            isIncreasing ? point.x >= minX : point.x <= maxX,
+          );
+        }
+
+        // Fit a smooth curve to the points and replace them.
+        points = fitCurve(points, params.numPoints);
+        if (!points.length) return;
+        // Plot the points on the graph in red to show the user what has been interpreted from their graph. Plot them as a curve.
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        // Now that we have smooth points, we'll do the mathsy bit.
+        // Rescale all the y values to be between +-radius using the height of the canvas, with the middle being 0.
+        points = points.map((point) => ({
+          x: point.x - axisLeft,
+          y:
+            (-(canvas.height / 2 - point.y) / (canvas.height / 2)) *
+            params.radius *
+            params.sliding_scale,
+        }));
+        // Treat each point as the sliding displacement of a flagellum, where x is the arclength along the flagellum and y is the sliding displacement.
+        // Compute the angle of the flagellum:
+        let angles = points.map(
+          (point) =>
+            (point.y - params.basal_sliding * params.radius) / params.radius +
+            params.basal_angle,
+        );
+        // Compute the x and y components of the flagellum:
+        let ds = 1 / params.numPoints;
+        let xComponents = angles.map((angle) => ds * Math.cos(angle));
+        let yComponents = angles.map((angle) => ds * Math.sin(angle));
+        let cumulativeX = xComponents.reduce((acc, x, i) => {
+          if (i === 0) {
+            acc.push(x);
+          } else {
+            acc.push(acc[i - 1] + x);
+          }
+          return acc;
+        }, []);
+        let cumulativeY = yComponents.reduce((acc, y, i) => {
+          if (i === 0) {
+            acc.push(y);
+          } else {
+            acc.push(acc[i - 1] + y);
+          }
+          return acc;
+        }, []);
+        // Plot these on the flagellumCanvas.
+        flagCtx.clearRect(0, 0, canvas.width, canvas.height);
+        flagCtx.beginPath();
+        // Work out the bounds of the flagellum, then draw it centered on the canvas.
+        let xMin = Math.min(...cumulativeX);
+        let xMax = Math.max(...cumulativeX);
+        let yMin = Math.min(...cumulativeY);
+        let yMax = Math.max(...cumulativeY);
+        let xRange = xMax - xMin;
+        let yRange = yMax - yMin;
+        let xScale = (0.8 * canvas.width) / xRange;
+        let yScale = (0.8 * canvas.height) / yRange;
+        let scale = Math.min(xScale, yScale);
+        cumulativeX = cumulativeX.map((x) => (x - xMin) * scale);
+        cumulativeY = cumulativeY.map((y) => (y - (yMin + yMax) / 2) * scale);
+        for (let i = 0; i < cumulativeX.length; i++) {
+          flagCtx.lineTo(
+            cumulativeX[i] + 0.1 * canvas.width,
+            canvas.height / 2 + cumulativeY[i],
+          );
+        }
+        flagCtx.strokeStyle = "black";
+        flagCtx.lineWidth = 6;
+        flagCtx.stroke();
+      }
+
+      function fitCurve(points, samples) {
+        if (points.length < 2) return points;
+
+        const spline = new Spline(
+          points.map((p) => p.x),
+          points.map((p) => p.y),
+        );
+        const sampledPoints = [];
+        const step =
+          (points[points.length - 1].x - points[0].x) / (samples - 1);
+
+        for (let i = 0; i < samples; i++) {
+          const x = points[0].x + i * step;
+          const y = spline.at(x);
+          sampledPoints.push({ x, y });
+        }
+
+        return sampledPoints;
+      }
+
+      class Spline {
+        constructor(x, y) {
+          this.x = x;
+          this.y = y;
+          this.a = [];
+          this.b = [];
+          this.c = [];
+          this.d = [];
+          this.n = x.length - 1;
+
+          this.h = [];
+          for (let i = 0; i < this.n; i++) {
+            this.h.push(x[i + 1] - x[i]);
+          }
+
+          const alpha = [0];
+          for (let i = 1; i < this.n; i++) {
+            alpha.push(
+              (3 / this.h[i]) * (y[i + 1] - y[i]) -
+                (3 / this.h[i - 1]) * (y[i] - y[i - 1]),
+            );
+          }
+
+          const l = [1];
+          const mu = [0];
+          const z = [0];
+          for (let i = 1; i < this.n; i++) {
+            l.push(2 * (x[i + 1] - x[i - 1]) - this.h[i - 1] * mu[i - 1]);
+            mu.push(this.h[i] / l[i]);
+            z.push((alpha[i] - this.h[i - 1] * z[i - 1]) / l[i]);
+          }
+
+          l.push(1);
+          z.push(0);
+          this.c.push(0);
+
+          for (let j = this.n - 1; j >= 0; j--) {
+            this.c[j] = z[j] - mu[j] * this.c[0];
+            this.b[j] =
+              (y[j + 1] - y[j]) / this.h[j] -
+              (this.h[j] * (this.c[0] + 2 * this.c[j])) / 3;
+            this.d[j] = (this.c[0] - this.c[j]) / (3 * this.h[j]);
+            this.a[j] = y[j];
+          }
+        }
+
+        at(x) {
+          let i = this.x.length - 2;
+          while (i >= 0 && x < this.x[i]) {
+            i--;
+          }
+          const dx = x - this.x[i];
+          return (
+            this.a[i] +
+            this.b[i] * dx +
+            this.c[i] * dx * dx +
+            this.d[i] * dx * dx * dx
+          );
+        }
+      }
+    </script>
+  </body>
+</html>
